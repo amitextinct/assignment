@@ -11,22 +11,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-import { Check, ChevronsUpDown } from "lucide-react";
-
-import { cn } from "@/lib/utils";
-
-import {
-  Command,
-  CommandGroup,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-
 import * as React from "react";
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -41,12 +25,21 @@ import {
 } from "@/components/ui/dropdown-menu";
 import axios from "axios";
 
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
 type categories = {
   value: string;
   label: string;
 };
 
-const categoriess: categories[] = [
+const categories: categories[] = [
   {
     value: "groceries",
     label: "groceries",
@@ -71,7 +64,6 @@ const categoriess: categories[] = [
 
 export default function Home() {
   const { setTheme } = useTheme();
-  const [open, setOpen] = React.useState(false);
 
   const [transaction, setTransacction] = React.useState({
     amount: 0,
@@ -79,9 +71,10 @@ export default function Home() {
     category: "others",
   });
 
-  const addTransaction = async () =>{
-
-  }
+  const addTransaction = async () => {
+    console.log('Transaction Details:');
+    console.table(transaction);
+  };
 
   return (
     <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
@@ -123,70 +116,68 @@ export default function Home() {
                 <Label htmlFor="name" className="text-right">
                   Amount
                 </Label>
-                <Input type="Number" id="amount" value={transaction.amount} onChange={(e) => setTransacction({...transaction,amount : Number(e.target.value)})} className="col-span-3" />
+                <Input
+                  type="Number"
+                  id="amount"
+                  value={transaction.amount}
+                  onChange={(e) =>
+                    setTransacction({
+                      ...transaction,
+                      amount: Number(e.target.value),
+                    })
+                  }
+                  className="col-span-3"
+                />
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="username" className="text-right">
                   Description
                 </Label>
-                <Input type="text" id="description" value={transaction.description} onChange={(e) => setTransacction({...transaction,description : e.target.value})}className="col-span-3" />
+                <Input
+                  type="text"
+                  id="description"
+                  value={transaction.description}
+                  onChange={(e) =>
+                    setTransacction({
+                      ...transaction,
+                      description: e.target.value,
+                    })
+                  }
+                  className="col-span-3"
+                />
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="username" className="text-right">
                   Category
                 </Label>
-                <Popover open={open} onOpenChange={setOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={open}
-                      className="w-[200px] justify-between"
-                    >
-                      {transaction.category
-                        ? categoriess.find(
-                            (category) => category.value === transaction.category
-                          )?.label
-                        : "Select category..."}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[200px] p-0">
-                    <Command>
-                      <CommandList>
-                        <CommandGroup>
-                          {categoriess.map((category) => (
-                            <CommandItem
-                              key={category.value}
-                              value={category.value}
-                              onSelect={(currentValue: string) => {
-                                setTransacction({
-                                  ...transaction,
-                                  category: currentValue,
-                                });
-                                setOpen(false);
-                              }}
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  transaction.category === category.value
-                                    ? "opacity-100"
-                                    : "opacity-0"
-                                )}
-                              />
-                              {category.label}
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+                <Select
+                  value={transaction.category}
+                  onValueChange={(value) =>
+                    setTransacction({
+                      ...transaction,
+                      category: value,
+                    })
+                  }
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Select a category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {categories.map((category) => (
+                        <SelectItem key={category.value} value={category.value}>
+                          {category.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <DialogFooter>
-              <Button type="submit" onClick={addTransaction}>Save changes</Button>
+              <Button type="submit" onClick={addTransaction}>
+                Save changes
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
