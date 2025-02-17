@@ -100,18 +100,6 @@ type Transaction = {
   createdAt: string;
 };
 
-const dummyTransactions: Transaction[] = Array.from({ length: 20 }).map(
-  (_, i) => ({
-    _id: `trans_${i + 1}`,
-    amount: Math.floor(Math.random() * 1000) + 10,
-    description: `Transaction ${i + 1}`,
-    category: categories[Math.floor(Math.random() * categories.length)].value,
-    createdAt: new Date(
-      Date.now() - Math.floor(Math.random() * 30) * 24 * 60 * 60 * 1000
-    ).toISOString(),
-  })
-);
-
 const CustomTooltip = ({ active, payload, label }: {
   active?: boolean;
   payload?: Array<{ value: number }>;
@@ -137,6 +125,9 @@ export default function Home() {
   const { setTheme } = useTheme();
   const [open, setOpen] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
+  const [transactions, setTransactions] = React.useState<Transaction[]>([]);
+  const [isLoadingTransactions, setIsLoadingTransactions] = React.useState(true);
+  const [editingId, setEditingId] = React.useState<string | null>(null);
 
   const [transaction, setTransacction] = React.useState({
     amount: 0,
@@ -147,45 +138,119 @@ export default function Home() {
   const addTransaction = async () => {
     setIsLoading(true);
     try {
-      const response  = await axios.post("/api/transactions", transaction);
-      console.log(response.data);
-      toast.success(response.data.message);
-      setOpen(false); // Close dialog after success
+      await axios.post("/api/transactions", transaction);
+      toast.success("Transaction added successfully");
+      setOpen(false);
+      getTransactions();
     } catch (error) {
       if (error instanceof Error) {
+        console.error(error.message);
         toast.error(error.message);
       } else {
-        toast.error('An unknown error occurred');
+        console.error('An unknown error occurred');
+        toast.error('Failed to add transaction');
       }
     } finally {
       setIsLoading(false);
     }
   };
 
-  // React.useEffect(()->{
-  //   if(amount > 0 && category.length > 0)
-  // })
+  const getTransactions = async () => {
+    setIsLoadingTransactions(true);
+    try {
+      const response = await axios.get("/api/transactions");
+      if (response.data.success && Array.isArray(response.data.transactions)) {
+        setTransactions(response.data.transactions);
+      } else {
+        console.error('Invalid response format:', response.data);
+        toast.error('Failed to load transactions');
+        setTransactions([]);
+      }
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+      toast.error('Failed to load transactions');
+      setTransactions([]);
+    } finally {
+      setIsLoadingTransactions(false);
+    }
+  };
 
-  // Add this function to process transactions for the chart
+  const editTransaction = async () => {
+    setIsLoading(true);
+    try {
+      const response = await axios.put("/api/transactions", {
+        id: editingId,
+        ...transaction
+      });
+      if (response.data.success) {
+        toast.success("Transaction updated successfully");
+        setOpen(false);
+        getTransactions();
+        setEditingId(null);
+      } else {
+        toast.error("Failed to update transaction");
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error(error.message);
+        toast.error(error.message);
+      } else {
+        toast.error("Failed to update transaction");
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const deleteTransaction = async (id: string) => {
+    try {
+      await axios.delete("/api/transactions", { data: { id } });
+      toast.success("Transaction deleted successfully");
+      getTransactions();
+    } catch  {
+      toast.error("Failed to delete transaction");
+    }
+  };
+
+  const handleEditClick = (trans: Transaction) => {
+    setEditingId(trans._id);
+    setTransacction({
+      amount: trans.amount,
+      description: trans.description,
+      category: trans.category,
+    });
+    setOpen(true);
+  };
+
+  React.useEffect(() => {
+    getTransactions();
+  }, []);
+
   const processTransactionsForChart = () => {
-    const sortedTransactions = [...dummyTransactions].sort((a, b) => 
+    if (!transactions.length) return [];
+    
+    const sortedTransactions = [...transactions].sort((a, b) => 
       new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
     );
 
-    return sortedTransactions.map(trans => ({
-      date: new Date(trans.createdAt).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric'
-      }),
-      amount: trans.amount
-    }));
+    let runningTotal = 0;
+    return sortedTransactions.map(trans => {
+      runningTotal += trans.amount;
+      return {
+        date: new Date(trans.createdAt).toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric'
+        }),
+        amount: runningTotal
+      };
+    });
   };
 
   return (
     <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
       <NavigationMenu>
         <NavigationMenuList>
-          <NavigationMenuItem>Item One</NavigationMenuItem>
+          <NavigationMenuItem>Assignment</NavigationMenuItem>
           <NavigationMenuItem>
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild>
@@ -193,7 +258,7 @@ export default function Home() {
               </DialogTrigger>
               <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
-                  <DialogTitle>Add transaction</DialogTitle>
+                  <DialogTitle>{editingId ? 'Edit transaction' : 'Add transaction'}</DialogTitle>
                   <DialogDescription>
                     Fill in the transaction details. Click save when you&apos;re
                     done.
@@ -266,11 +331,15 @@ export default function Home() {
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button type="submit" onClick={addTransaction} disabled={isLoading}>
+                  <Button 
+                    type="submit" 
+                    onClick={editingId ? editTransaction : addTransaction}
+                    disabled={isLoading}
+                  >
                     {isLoading ? (
-                      <><span className="animate-spin">⏳</span> Adding...</>
+                      <><span className="animate-spin">⏳</span> {editingId ? 'Updating...' : 'Adding...'}</>
                     ) : (
-                      "Add transaction"
+                      editingId ? "Save changes" : "Add transaction"
                     )}
                   </Button>
                 </DialogFooter>
@@ -311,141 +380,66 @@ export default function Home() {
           <TabsContent value="transactions" className="h-[500px]">
             <ScrollArea className="h-full w-full rounded-md border">
               <div className="p-4">
-                {dummyTransactions.map((trans) => (
-                  <div key={trans._id}>
-                    <div className="text-sm flex items-center gap-4 py-2">
-                      <span className="flex-1">
-                        {trans.amount.toLocaleString("en-US", {
-                          style: "currency",
-                          currency: "USD",
-                        })}{" "}
-                        - {trans.description}
-                      </span>
-                      <span className="text-muted-foreground text-xs">
-                        {new Date(trans.createdAt).toLocaleDateString()}
-                      </span>
-                      <div className="flex gap-2">
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button variant="outline" size="sm">
-                              Edit
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent className="sm:max-w-[425px]">
-                            <DialogHeader>
-                              <DialogTitle>Add transaction</DialogTitle>
-                              <DialogDescription>
-                                Fill in the transaction details. Click save when
-                                you&apos;re done.
-                              </DialogDescription>
-                            </DialogHeader>
-                            <div className="grid gap-4 py-4">
-                              <div className="grid grid-cols-4 items-center gap-4">
-                                <Label htmlFor="name" className="text-right">
-                                  Amount
-                                </Label>
-                                <Input
-                                  type="Number"
-                                  id="amount"
-                                  value={transaction.amount}
-                                  onChange={(e) =>
-                                    setTransacction({
-                                      ...transaction,
-                                      amount: Number(e.target.value),
-                                    })
-                                  }
-                                  className="col-span-3"
-                                />
-                              </div>
-                              <div className="grid grid-cols-4 items-center gap-4">
-                                <Label
-                                  htmlFor="username"
-                                  className="text-right"
-                                >
-                                  Description
-                                </Label>
-                                <Input
-                                  type="text"
-                                  id="description"
-                                  value={transaction.description}
-                                  onChange={(e) =>
-                                    setTransacction({
-                                      ...transaction,
-                                      description: e.target.value,
-                                    })
-                                  }
-                                  className="col-span-3"
-                                />
-                              </div>
-                              <div className="grid grid-cols-4 items-center gap-4">
-                                <Label
-                                  htmlFor="username"
-                                  className="text-right"
-                                >
-                                  Category
-                                </Label>
-                                <Select
-                                  value={transaction.category}
-                                  onValueChange={(value) =>
-                                    setTransacction({
-                                      ...transaction,
-                                      category: value,
-                                    })
-                                  }
-                                >
-                                  <SelectTrigger className="w-[180px]">
-                                    <SelectValue placeholder="Select a category" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectGroup>
-                                      {categories.map((category) => (
-                                        <SelectItem
-                                          key={category.value}
-                                          value={category.value}
-                                        >
-                                          {category.label}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectGroup>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
-                            <DialogFooter>
-                              <Button type="submit" onClick={addTransaction}>
-                                Save changes
-                              </Button>
-                            </DialogFooter>
-                          </DialogContent>
-                        </Dialog>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="destructive" size="sm">
-                              Delete
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>
-                                Are you absolutely sure?
-                              </AlertDialogTitle>
-                              <AlertDialogDescription>
-                                This will permanently delete this transaction
-                                and remove your data from our servers. This
-                                action cannot be undone.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction>Continue</AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    </div>
-                    <Separator className="my-2" />
+                {isLoadingTransactions ? (
+                  <div className="flex justify-center items-center h-full">
+                    <span className="animate-spin">⏳</span> Loading transactions...
                   </div>
-                ))}
+                ) : !transactions || transactions.length === 0 ? (
+                  <div className="text-center text-muted-foreground p-4">
+                    No transactions found. Add your first transaction!
+                  </div>
+                ) : (
+                  transactions.map((trans) => (
+                    <div key={trans._id}>
+                      <div className="text-sm flex items-center gap-4 py-2">
+                        <span className="flex-1">
+                          {trans.amount.toLocaleString("en-US", {
+                            style: "currency",
+                            currency: "USD",
+                          })}{" "}
+                          - {trans.description}
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            ({trans.category})
+                          </span>
+                        </span>
+                        <span className="text-muted-foreground text-xs">
+                          {new Date(trans.createdAt).toLocaleDateString()}
+                        </span>
+                        <div className="flex gap-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleEditClick(trans)}
+                          >
+                            Edit
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="destructive" size="sm">
+                                Delete
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This will permanently delete this transaction and remove your data from our servers.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => deleteTransaction(trans._id)}>
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </div>
+                      <Separator className="my-2" />
+                    </div>
+                  ))
+                )}
               </div>
             </ScrollArea>
           </TabsContent>
