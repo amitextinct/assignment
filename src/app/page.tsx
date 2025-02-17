@@ -1,5 +1,6 @@
 "use client";
 import Image from "next/image";
+import toast from "react-hot-toast";
 // import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -40,14 +41,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-// import axios from "axios";
+import axios from "axios";
 import {
   NavigationMenu,
   // NavigationMenuContent,
   // NavigationMenuIndicator,
   NavigationMenuItem,
-  // NavigationMenuLink,
   NavigationMenuList,
+  // NavigationMenuLink,
   // NavigationMenuTrigger,
   // NavigationMenuViewport,
 } from "@/components/ui/navigation-menu";
@@ -134,6 +135,7 @@ const CustomTooltip = ({ active, payload, label }: {
 
 export default function Home() {
   const { setTheme } = useTheme();
+  const [open, setOpen] = React.useState(false);
 
   const [transaction, setTransacction] = React.useState({
     amount: 0,
@@ -144,7 +146,24 @@ export default function Home() {
   const addTransaction = async () => {
     console.log("Transaction Details:");
     console.table(transaction);
+    try {
+      const response  = await axios.post("/api/transactions", transaction);
+      console.log(response.data);
+      toast.success(response.data.message);
+      setOpen(false); // Close dialog after success
+    } catch (error) {
+      if (error instanceof Error) {
+        toast.error(error.message);
+      } else {
+        toast.error('An unknown error occurred');
+      }
+    }
+
   };
+
+  // React.useEffect(()->{
+  //   if(amount > 0 && category.length > 0)
+  // })
 
   // Add this function to process transactions for the chart
   const processTransactionsForChart = () => {
@@ -167,7 +186,7 @@ export default function Home() {
         <NavigationMenuList>
           <NavigationMenuItem>Item One</NavigationMenuItem>
           <NavigationMenuItem>
-            <Dialog>
+            <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline">Add transaction</Button>
               </DialogTrigger>
@@ -247,7 +266,7 @@ export default function Home() {
                 </div>
                 <DialogFooter>
                   <Button type="submit" onClick={addTransaction}>
-                    Save changes
+                    add transaction
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -287,7 +306,6 @@ export default function Home() {
           <TabsContent value="transactions" className="h-[500px]">
             <ScrollArea className="h-full w-full rounded-md border">
               <div className="p-4">
-
                 {dummyTransactions.map((trans) => (
                   <div key={trans._id}>
                     <div className="text-sm flex items-center gap-4 py-2">
