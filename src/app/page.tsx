@@ -1,7 +1,7 @@
 "use client";
-import Image from "next/image";
-import toast from "react-hot-toast";
-// import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast"
+import { useCallback } from "react";
+
 import {
   Dialog,
   DialogContent,
@@ -12,7 +12,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 import {
   AlertDialog,
@@ -121,6 +121,30 @@ const CustomTooltip = ({ active, payload, label }: {
   return null;
 };
 
+type CustomBarProps = {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+};
+
+const CustomBar = ({ x = 0, y = 0, width = 0, height = 0 }: CustomBarProps) => {
+  return (
+    <g>
+      <rect
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        fill="#4338ca" // Indigo-700 color
+        opacity={0.9}
+        rx={4}
+        className="transition-colors hover:fill-[#3730a3]" // Slightly darker on hover
+      />
+    </g>
+  );
+};
+
 export default function Home() {
   const { setTheme } = useTheme();
   const [open, setOpen] = React.useState(false);
@@ -128,6 +152,7 @@ export default function Home() {
   const [transactions, setTransactions] = React.useState<Transaction[]>([]);
   const [isLoadingTransactions, setIsLoadingTransactions] = React.useState(true);
   const [editingId, setEditingId] = React.useState<string | null>(null);
+  const { toast } = useToast()
 
   const [transaction, setTransacction] = React.useState({
     amount: 0,
@@ -139,41 +164,59 @@ export default function Home() {
     setIsLoading(true);
     try {
       await axios.post("/api/transactions", transaction);
-      toast.success("Transaction added successfully");
+      toast({
+        description: "Transaction added successfully",
+      });
       setOpen(false);
       getTransactions();
     } catch (error) {
       if (error instanceof Error) {
         console.error(error.message);
-        toast.error(error.message);
+        toast({
+          variant: "destructive",
+          description: error.message,
+        });
       } else {
         console.error('An unknown error occurred');
-        toast.error('Failed to add transaction');
+        toast({
+          variant: "destructive",
+          description: "Failed to add transaction",
+        });
       }
     } finally {
       setIsLoading(false);
     }
   };
 
-  const getTransactions = async () => {
+  const getTransactions = useCallback(async () => {
     setIsLoadingTransactions(true);
     try {
       const response = await axios.get("/api/transactions");
       if (response.data.success && Array.isArray(response.data.transactions)) {
-        setTransactions(response.data.transactions);
+        // Sort transactions by date in descending order
+        const sortedTransactions = response.data.transactions.sort((a: Transaction, b: Transaction) => 
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+        setTransactions(sortedTransactions);
       } else {
         console.error('Invalid response format:', response.data);
-        toast.error('Failed to load transactions');
+        toast({
+          variant: "destructive",
+          description: "Invalid response format",
+        });
         setTransactions([]);
       }
     } catch (error) {
       console.error('Error fetching transactions:', error);
-      toast.error('Failed to load transactions');
+      toast({
+        variant: "destructive",
+        description: "Failed to fetch transactions",
+      });
       setTransactions([]);
     } finally {
       setIsLoadingTransactions(false);
     }
-  };
+  }, [toast]);
 
   const editTransaction = async () => {
     setIsLoading(true);
@@ -183,19 +226,29 @@ export default function Home() {
         ...transaction
       });
       if (response.data.success) {
-        toast.success("Transaction updated successfully");
+        toast({
+          description: "Transaction updated successfully",
+        });
         setOpen(false);
         getTransactions();
         setEditingId(null);
       } else {
-        toast.error("Failed to update transaction");
+        toast({
+          variant: "destructive",
+          description: "Failed to update transaction",
+        });
       }
     } catch (error) {
       if (error instanceof Error) {
-        console.error(error.message);
-        toast.error(error.message);
+        toast({
+          variant: "destructive",
+          description: error.message,
+        });
       } else {
-        toast.error("Failed to update transaction");
+        toast({
+          variant: "destructive",
+          description: "Failed to update transaction",
+        });
       }
     } finally {
       setIsLoading(false);
@@ -205,10 +258,15 @@ export default function Home() {
   const deleteTransaction = async (id: string) => {
     try {
       await axios.delete("/api/transactions", { data: { id } });
-      toast.success("Transaction deleted successfully");
+      toast({
+        description: "Transaction deleted successfully",
+      });
       getTransactions();
-    } catch  {
-      toast.error("Failed to delete transaction");
+    } catch {
+      toast({
+        variant: "destructive",
+        description: "Failed to delete transaction",
+      });
     }
   };
 
@@ -224,33 +282,30 @@ export default function Home() {
 
   React.useEffect(() => {
     getTransactions();
-  }, []);
+  }, [getTransactions]);
 
   const processTransactionsForChart = () => {
     if (!transactions.length) return [];
     
-    const sortedTransactions = [...transactions].sort((a, b) => 
-      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-    );
+    // Take only the last 10 transactions and reverse them for the chart
+    const recentTransactions = [...transactions]
+      .slice(0, 10)
+      .reverse();
 
-    let runningTotal = 0;
-    return sortedTransactions.map(trans => {
-      runningTotal += trans.amount;
-      return {
-        date: new Date(trans.createdAt).toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric'
-        }),
-        amount: runningTotal
-      };
-    });
+    return recentTransactions.map(trans => ({
+      date: new Date(trans.createdAt).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric'
+      }),
+      amount: trans.amount
+    }));
   };
 
   return (
     <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
       <NavigationMenu>
         <NavigationMenuList>
-          <NavigationMenuItem>Assignment</NavigationMenuItem>
+          <NavigationMenuItem className="mr-7">Assignment</NavigationMenuItem>
           <NavigationMenuItem>
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild>
@@ -445,70 +500,34 @@ export default function Home() {
           </TabsContent>
           <TabsContent value="analysis" className="h-[500px]">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={processTransactionsForChart()}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
-                <YAxis />
-                <Tooltip content={<CustomTooltip />} />
-                <Line 
-                  type="monotone" 
-                  dataKey="amount" 
-                  stroke="#8884d8" 
-                  strokeWidth={2}
-                  dot={false}
+              <BarChart data={processTransactionsForChart()}>
+                <CartesianGrid 
+                  strokeDasharray="3 3" 
+                  stroke="hsl(var(--muted-foreground))" 
+                  opacity={0.2}
                 />
-              </LineChart>
+                <XAxis 
+                  dataKey="date" 
+                  stroke="hsl(var(--foreground))"
+                  fontSize={12}
+                />
+                <YAxis 
+                  stroke="hsl(var(--foreground))"
+                  fontSize={12}
+                />
+                <Tooltip 
+                  content={<CustomTooltip />}
+                  cursor={{ fill: 'hsl(var(--muted))', opacity: 0.2 }}
+                />
+                <Bar 
+                  dataKey="amount" 
+                  shape={<CustomBar />}
+                />
+              </BarChart>
             </ResponsiveContainer>
           </TabsContent>
         </Tabs>
       </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?categories=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
     </div>
   );
 }
