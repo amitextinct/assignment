@@ -136,6 +136,7 @@ const CustomTooltip = ({ active, payload, label }: {
 export default function Home() {
   const { setTheme } = useTheme();
   const [open, setOpen] = React.useState(false);
+  const [isLoading, setIsLoading] = React.useState(false);
 
   const [transaction, setTransacction] = React.useState({
     amount: 0,
@@ -144,8 +145,7 @@ export default function Home() {
   });
 
   const addTransaction = async () => {
-    console.log("Transaction Details:");
-    console.table(transaction);
+    setIsLoading(true);
     try {
       const response  = await axios.post("/api/transactions", transaction);
       console.log(response.data);
@@ -157,8 +157,9 @@ export default function Home() {
       } else {
         toast.error('An unknown error occurred');
       }
+    } finally {
+      setIsLoading(false);
     }
-
   };
 
   // React.useEffect(()->{
@@ -265,8 +266,12 @@ export default function Home() {
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button type="submit" onClick={addTransaction}>
-                    add transaction
+                  <Button type="submit" onClick={addTransaction} disabled={isLoading}>
+                    {isLoading ? (
+                      <><span className="animate-spin">⏳</span> Adding...</>
+                    ) : (
+                      "Add transaction"
+                    )}
                   </Button>
                 </DialogFooter>
               </DialogContent>
